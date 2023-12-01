@@ -1,0 +1,158 @@
+---
+title: "Similarity Assignment"
+author: "Gaurav Gade"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Python Application
+
+Import the `completed_clean_data` and convert to a `pandas` dataframe. This dataset includes a list of scientific research articles that all appeared when I searched for "databases", "corpus", and "linguistic norms". 
+
+```{r}
+library(reticulate)
+
+df = read.csv("C:/Users/nagar/Documents/ANLY 540 Language Modeling/Similarity/completed_clean_data.csv")
+
+job = read.csv("C:/Users/nagar/Documents/ANLY 540 Language Modeling/Project/Job/job_final.csv")
+
+library(lubridate)
+job$Date <- lubridate::dmy(job$Date)
+
+job$Term <- as.factor(job$Term)
+job$IT <- as.factor(job$IT)
+
+```
+
+
+```{r EDA on JOb }
+
+  summary(job)
+
+head(job$date)
+
+head(job$Title)
+
+
+
+```
+
+```{python}
+##python chunk
+import pandas as pd
+
+#import data
+df = pd.read_csv('C:/Users/nagar/Documents/ANLY 540 Language Modeling/Similarity/completed_clean_data.csv')
+#cleanup for this specific example
+df = df[['AUTHOR', 'JOURNAL', 'TITLE', 'YEAR', 'ABSTRACT']]
+df.dropna(inplace=True)
+df.info()
+```
+
+```{python job}
+##python chunk
+import pandas as pd
+
+#import data
+df  = pd.read_csv('C:/Users/nagar/Documents/ANLY 540 Language Modeling/Project/Job/job_final.csv')
+
+#cleanup for this specific example
+df = df[['JobRequirment', 'JobRequirment', 'Title', 'Date', 'Company']]
+df.dropna(inplace=True)
+df.info()
+
+```
+
+Load all the libraries you will need for the Python section. You can also put in the functions for normalizing the text and calculating the top 5 related objects.
+
+```{python}
+##python chunk
+import string
+import nltk
+import re
+import numpy as np
+
+stop_words = nltk.corpus.stopwords.words('english')
+
+def normalize_document(doc):
+    # lower case and remove special characters\whitespaces
+    doc = re.sub(r'[^a-zA-Z0-9\s]', '', doc, re.I|re.A)
+    doc = doc.lower()
+    doc = doc.strip()
+    #remove punctuation
+    doc = doc.translate(str.maketrans('', '', string.punctuation))
+    # tokenize document
+    tokens = nltk.word_tokenize(doc)
+    # filter stopwords out of document
+    filtered_tokens = [token for token in tokens if token not in stop_words]
+    # re-create document from filtered tokens
+    doc = ' '.join(filtered_tokens)
+    return doc
+
+normalize_corpus = np.vectorize(normalize_document)
+
+
+```
+
+Use the normalizing text function to clean up the corpus - specifically, focus on the `ABSTRACT` column as our text to match.
+
+```{python}
+##python chunk
+norm_corpus = normalize_corpus(list(df['JobRequirment']))
+len(norm_corpus)
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+tf = TfidfVectorizer(ngram_range=(1, 2), min_df=2)
+tfidf_matrix = tf.fit_transform(norm_corpus)
+tfidf_matrix.shape
+```
+
+Calculate the cosine similarity between the abstracts of the attached documents. 
+
+```{python}
+##python chunk
+from sklearn.metrics.pairwise import cosine_similarity
+
+doc_sim = cosine_similarity(tfidf_matrix)
+doc_sim_df = pd.DataFrame(doc_sim)
+doc_sim_df.head()
+```
+
+Using our moving recommender - pick a single article (under `TITLE`) and recommend five other related articles.
+
+```{python}
+##python chunk
+def article_recommender(Title, JobRequirment, doc_sims):
+    # find article id
+    article_idx = np.where(JobRequirment == Title)[0][0]
+    # get article similarities
+    article_similarities = doc_sims.iloc[article_idx].values
+    # get top 5 similar article IDs
+    similar_article_idxs = np.argsort(-article_similarities)[1:11]
+    # get top 5 article
+    similar_articles = JobRequirment[similar_article_idxs]
+    # return the top 5 articles
+    return similar_articles
+
+article_recommender("Chief Financial Officer", #name of article must be in dataset
+                  df["Title"].values, #all article names
+                  doc_sim_df #pd dataframe of similarity values
+                  )
+
+                  
+```
+
+
+## Discussion Questions
+- Describe a set of texts and research question that interests you that could be explored using this method. Basically, what is a potential application of this method to another area of research?
+
+  - ANSWER: 
+
+The similarity measures can be used to compare job descriptions to find out similar positions and titles based on the role descriptions. In fact, we are analyzing job descriptions for our final project and we can use this method for our project. It can be used by students and researchers to quickly find related articles that are pertinent to their research objective and research interest. It can also be used to detect fake news or misleading information. 

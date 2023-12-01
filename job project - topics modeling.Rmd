@@ -1,0 +1,227 @@
+---
+title: "Topics Models"
+author: "Gaurav Gade"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+For this assignment, you will use the same data as the Factor Analysis assignment to discover the important topics in U.S. Governors' tweets about the pandemic. The dataframe for the assignment includes four columns - State, Name, and Party of Governor plus the Text of their tweets. The Text column is the one you should process and analyze.
+
+## Load the libraries + functions
+
+Load all the libraries or functions that you will use to for the rest of the assignment. It is helpful to define your libraries and functions at the top of a report, so that others can know what they need for the report to compile correctly.
+
+Load the Python libraries or functions that you will use for that section. 
+
+```{r libraries}
+##r chunk
+library(reticulate)
+library(tm)
+library(topicmodels)
+library(tidyverse)
+library(tidytext)
+library(slam)
+```
+
+```{python}
+##python chunk
+#py_install("pyLDAvis")
+import string
+import pyLDAvis
+
+
+```
+
+## The Data
+
+```{r data}
+##r chunk
+speeches = read.csv("C:/Users/nagar/Documents/ANLY 540 Language Modeling/Project/Job/job_final.csv")#, header = F, stringsAsFactors = F, quote = "/")
+
+
+
+speeches = subset(speeches, speeches$IT == TRUE)
+
+speeches$IT <- as.factor(speeches$IT)
+
+table(speeches$IT)
+
+import_corpus = Corpus(VectorSource(speeches$JobRequirment))
+
+
+import_mat = 
+  DocumentTermMatrix(import_corpus,
+           control = list(stemming = TRUE, #create root words
+                          stopwords = TRUE, #remove stop words
+                          minWordLength = 3, #cut out small words
+                          removeNumbers = TRUE, #take out the numbers
+                          removePunctuation = TRUE)) #take out punctuation
+
+#weight the space
+import_weight = tapply(import_mat$v/row_sums(import_mat)[import_mat$i], 
+                       import_mat$j, 
+                       mean) *
+  log2(nDocs(import_mat)/col_sums(import_mat > 0))
+
+#ignore very frequent and 0 terms
+#import_mat = import_mat[ , import_weight >= 0.90]
+import_mat = import_mat[ row_sums(import_mat) > 0, ]
+
+k = 3 #set the number of topics
+
+SEED = 7 #set a random number 
+
+LDA_fit = LDA(import_mat, k = k, 
+              control = list(seed = SEED))
+
+LDA_fixed = LDA(import_mat, k = k, 
+                control = list(estimate.alpha = FALSE, seed = SEED))
+
+LDA_gibbs = LDA(import_mat, k = k, method = "Gibbs", 
+                control = list(seed = SEED, burnin = 1000, 
+                               thin = 100, iter = 1000))
+
+CTM_fit = CTM(import_mat, k = k, 
+              control = list(seed = SEED, 
+                             var = list(tol = 10^-4), 
+                             em = list(tol = 10^-3)))
+
+##r chunk
+LDA_fit@alpha
+
+LDA_fixed@alpha
+
+LDA_gibbs@alpha
+
+sapply(list(LDA_fit, LDA_fixed, LDA_gibbs, CTM_fit), 
+       function (x) 
+         mean(apply(posterior(x)$topics, 1, function(z) - sum(z * log(z)))))
+
+topics(LDA_fit, k)
+
+terms(LDA_fit,20)
+terms(LDA_gibbs,20)
+
+#use tidyverse to clean up the the fit     
+LDA_fit_topics = tidy(LDA_fit, matrix = "beta")
+
+#create a top terms 
+top_terms = LDA_fit_topics %>%
+   group_by(topic) %>%
+   top_n(10, beta) %>%
+   ungroup() %>%
+   arrange(topic, -beta)
+
+cleanup = theme(panel.grid.major = element_blank(), 
+                panel.grid.minor = element_blank(), 
+                panel.background = element_blank(), 
+                axis.line.x = element_line(color = "black"),
+                axis.line.y = element_line(color = "black"),
+                legend.key = element_rect(fill = "white"),
+                text = element_text(size = 10))
+
+#make the plot
+top_terms %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  cleanup +
+  coord_flip()
+
+LDA_gamma = tidy(LDA_fit, matrix = "gamma")
+
+LDA_gamma
+```
+
+## Gensim Modeling in Python
+
+Transfer the df['Text'] to Python and convert it to a list for processing. 
+
+```{python}
+##python chunk
+import pyLDAvis.gensim  # don't skip this
+import matplotlib.pyplot as plt
+import gensim
+
+import gensim.corpora as corpora
+
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer 
+ps = PorterStemmer()
+
+speeches = list(r.speeches["JobRequirment"])
+#speeches
+```
+
+Process the text using Python. 
+
+```{python}
+##python chunk
+##create a spot to save the processed text
+processed_text = []
+
+##loop through each item in the list
+for speech in speeches:
+  #lower case
+  speech = speech.lower()
+  #remove punctuation
+  speech = speech.translate(str.maketrans('', '', string.punctuation))
+  #create tokens
+  speech = nltk.word_tokenize(speech) 
+  #take out stop words
+  speech = [word for word in speech if word not in stopwords.words('english')] 
+  #stem the words
+  speech = [ps.stem(word = word) for word in speech]
+  #add it to our list
+  processed_text.append(speech)
+
+processed_text[0]
+#processed_text
+```
+
+Create the dictionary and term document matrix in Python.
+
+```{python}
+##python chunk
+#create a dictionary of the words
+dictionary = corpora.Dictionary(processed_text)
+
+#create a TDM
+doc_term_matrix = [dictionary.doc2bow(doc) for doc in processed_text]
+```
+
+Create the LDA Topics model in Python using the same number of topics as used in the Factor Analysis assignment. 
+
+```{python}
+##python chunk
+lda_model = gensim.models.ldamodel.LdaModel(corpus = doc_term_matrix, #TDM
+                                           id2word = dictionary, #Dictionary
+                                           num_topics = 5, 
+                                           random_state = 100,
+                                           update_every = 1,
+                                           chunksize = 100,
+                                           passes = 10,
+                                           alpha = 'auto',
+                                           per_word_topics = True)
+
+print(lda_model.print_topics())
+```
+
+Create the interactive graphics `html` file. Please note that this file saves in the same folder as your markdown document, and you should upload the knitted file and the LDA visualization html file. 
+
+```{python}
+##python chunk
+vis = pyLDAvis.gensim.prepare(lda_model, doc_term_matrix, dictionary, n_jobs = 1)
+pyLDAvis.save_html(vis, 'LDA_Visualizationv2.html') ##saves the file
+
+```
+
+

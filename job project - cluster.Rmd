@@ -1,0 +1,289 @@
+---
+title: 'Cluster Analysis'
+author: "Gaurav Gade"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load the libraries + functions
+
+Load all the libraries or functions that you will use to for the rest of the assignment. It is helpful to define your libraries and functions at the top of a report, so that others can know what they need for the report to compile correctly.
+
+```{r libaries}
+##r chunk
+#install.packages("cluster") 
+library(cluster)
+#install.packages("pvclust")
+library(pvclust)
+library(reticulate)
+library(dplyr)
+library(tidyverse)
+```
+
+## The Data
+
+The data for this assignment is tweets from US governors at the beginning of the pandemic (refer back to the Correspondence Analysis lecture). The dataset for this assignment includes basic info about each governor (state, name, party) and whether or not they used 1000 specific words in their tweets about COVID. Columns 4 to 1004 represent this words and are coded 0 (was not used in tweets) or 1 (was used in tweets). The goal of the current assignment is to explore the clusters of terms used in governors' tweets about COVID. 
+
+- Load the data.
+- Use row.names(df) = df$State to set the rownames as the governor's home state from the data.
+- Delete column 1, 2, and 3 from the data.
+- Pick at least 20 terms to analyze (either by name or by column number, df = df[,c(7:57)])
+- Flip the data using `t()`, as the clustering variables should be rows in the dataframe.
+
+```{r loaddata}
+##r chunk
+
+df <- read.csv("C:/Users/nagar/Documents/ANLY 540 Language Modeling/Cluster Analysis/Gov Tweets.csv")
+row.names(df) = df$State
+row.names(df)
+
+
+job = read.csv("C:/Users/nagar/Documents/ANLY 540 Language Modeling/Project/Job/jobdata_for_cluster.csv")
+
+
+
+job[-c(1)] <- sapply(job[-c(1)], as.integer)
+
+job[is.na(job)] <- 0
+job = as.matrix(job)
+job[-c(1)] = t(job[-c(1)])
+
+job = job[,c(2:12)]
+
+summary(job)
+
+job = job[c(4,7)]
+
+df <- df[, -c(1,2,3)]
+
+df = df[, c(2:22)]
+df <- t(df)
+
+```
+
+## Create Distances
+
+While the data set includes popular distance measures, we still need to figure out how these distance measures are related to each other. Create distance measures in Euclidean or Manhattan distance. 
+
+```{r distances}
+##r chunk
+#Overall
+measure.dist = dist(df, method = "euclidean") 
+#change method to maximum or manhattan 
+measure.dist
+
+
+measure.dist2 = dist(job, method = "euclidean") 
+#change method to maximum or manhattan 
+#measure.dist2
+
+
+
+```
+
+## Create Cluster
+
+- Use hierarchical clustering to examine the relatedness of these measures. 
+- Create a dendogram plot of the results. 
+
+Note: If one variable is alone in a cluster, replace it with another word and:
+- Rerun the distance and cluster measures.
+- Create a new plot of the cluster analysis (the branches may be hard to see but they are clearly separating out more).
+
+
+```{r cluster}
+##r chunk
+ 
+
+measure.hc = hclust(measure.dist, method = "ward.D2") 
+plot(measure.hc, hang = -1)
+
+
+measure.hc2 = hclust(measure.dist2, method = "ward.D2") 
+plot(measure.hc2, hang = -1)
+
+```
+
+## Silhouette
+
+- Using `sapply` calculate the average silhouette distances for 2 to n-1 clusters on only the second cluster analysis.
+
+```{r}
+##r chunk
+
+sapply(2:8, #we can run 2 to n-1 clusters 
+function(x) summary( 
+silhouette(cutree(measure.hc2, k = x), 
+measure.dist2))$avg.width #find the widths 
+)
+
+```
+
+## Examine those results
+- Replot the dendogram with cluster markers based on the highest silhouette value.
+- Interpret the results - what topics do these clusters seem to be capturing?
+Result interpretation: Topics that the clusters seem to have captured are:
+1. Covid: The keywords in the cluster include emergency, response, update, health and today which seem to be indicative of the measures taken by the state government to combat the virus. 
+2. Religious worship: This cluster seems to be centered around religious worship during covid. The keywords 'faith', 'remotely', 'church', 'imminent' and 'in-person' are in the same cluster. This reflects that the 
+tweets are indicative of the governments stand on how to practice going to church during the pandemic.
+3. Impact to economy and Industry: This sector includes the keywords 'sector', 'industry' and 'longer'
+4. Reflecting news and media: the keywords include PM, disaster, news, threat, meet, affect, crisis, hold and condolence.
+5. Announcements: This includes fight, governor, public and important.
+
+
+
+
+```{r replot}
+##r chunk
+{
+  plot(measure.hc2, hang = -1) 
+  rect.hclust(measure.hc2, k = 2)
+}
+
+
+```
+
+## Snake Plots
+
+Make a snake plot of the results by plotting a random subset of 25 word pairs. 
+  - Use something like random_data = dataframe[ , sample(1:ncol(dataframe), 25)].
+  - Then calculate the snake plot on that smaller dataset. 
+  - If you have more than two clusters, pick one pair you find interesting.
+
+What words appear to be most heavily tied to each cluster? Are there any interesting differences you see given the top and bottom most distinguishing words? 
+
+The words 'longer' and 'imminent' most certainly refer to the availability of the vaccine for COVID.
+Ironically, imminent means something that is due in a short period of time while longer refers to something that might take more time. The availability of a vaccine became a bone of contention between the democratic and republican leaders. The other cluster includes the word threat, disaster and crisis. Now this is especially interesting as the three words are used to express a given scenario with varying degress of severity. Threat does not sound as worrisome as 'disaster'. Crisis reflects an moderate to high level of severity.
+Based on what I read in the news, democratic governors' were trying to intensify the covid crisis whereas Republican governors' were trying to downplay it. (There were exceptions but this was the pattern). 
+
+
+ 
+  
+
+
+```{r snakeplot}
+random_data = df[, sample(1:ncol(df), 30)] 
+#save the clusters 
+clustercut = cutree(measure.hc, k = 2) 
+cluster1 = random_data[ names(clustercut[clustercut == 1]), ] #notice rows 
+cluster2 = random_data[ names(clustercut[clustercut == 2]), ] 
+#create the differences 
+differences = colMeans(cluster1) - colMeans(cluster2)
+
+{plot(sort(differences)*1.2, #make room for names on graph 
+1:length(differences), #y axis 
+type = "n", #empty plot + labels 
+xlab = "Cluster 2 < -- > Cluster 1", 
+yaxt = "n", ylab = "") 
+text(sort(differences), 
+1:length(differences), 
+names(sort(differences)))}
+
+```
+
+
+The snakeplot (25 word pairs, k =2 ) revealed interesting insights about the states. The largest cluster consists of 6 states (WV, AL, ND, NV, VA and MN ). The other large clusters included states HI, WY, OK, TN
+and ME, CO, GA, MA and NC.
+
+
+  - Note: you can run this a few times to see what you think over a wide variety of plots. Please detail you answer including the pairs, since the knitted version will be a different random run.
+## Bootstrapping
+
+- Use `pvclust` to validate your solution on the dataframe.
+- Plot the pv cluster. 
+- Include and run the following line: cluster_labels <- rownames(df)
+- How well do the clusters appear to work? 
+
+The clusters appear to work in accordance with what you would expect from the words in the same cluster.
+For example, sector and industry are in the same cluster. Threat, crisis and disaster are in the same cluster. Though the terms differ according to political affiliation, the clusters are generally distinct and well-apart from one another.
+
+```{r pvc}
+cluster_labels <- rownames(job)
+measure.pvc = pvclust(t(job), #this function clusters by columns, so flip matrix 
+method.hclust = "ward.D2", 
+method.dist = "euclidean" 
+)
+plot(measure.pvc, hang = -1)
+
+#measure.pvc
+
+```
+
+## Working with Python
+
+- Load the Python libraries and import the dataset from R. 
+```{r initialize}
+##r chunk
+
+py_config()
+cluster_labels <- rownames(df)
+py_install("scipy")
+```
+
+
+```{python load_everything}
+import scipy.cluster.hierarchy as sch 
+from sklearn.cluster import AgglomerativeClustering 
+import matplotlib 
+matplotlib.use('Agg') 
+from matplotlib import pyplot as plt 
+sim_data = r.df
+#create distances 
+sim_dist = sch.linkage(sim_data, method='ward')
+
+```
+
+- Create a dendogram of the variables.
+
+```{python py_dendogram}
+plt.figure() 
+plt.title("Hierarchical Clustering Dendogram") 
+plt.xlabel("Causal Variable") 
+plt.ylabel("Distance") 
+# create dendrogram 
+sch.dendrogram(sim_dist, #distance 
+leaf_rotation=90., leaf_font_size=8., 
+labels = r.cluster_labels) #create tree
+plt.show()
+```
+
+- Calculate the silhouette silhouette distances for 2 to n-1 clusters.
+
+```{python silhouette2}
+from sklearn import metrics 
+from scipy.cluster.hierarchy import fcluster 
+max_d = 9 
+clusters = fcluster(sim_dist, max_d, criterion='maxclust') 
+clusters
+```
+```{python silhouette3}
+from sklearn import metrics 
+from scipy.cluster.hierarchy import fcluster 
+max_d = 12 
+for i in range(2, max_d): 
+  sil = metrics.silhouette_score(sim_data, fcluster(sim_dist, i, criterion='maxclust'), metric='euclidean') 
+  print(i,":",sil)
+```
+
+## Interpretation
+
+- Do the results appear the same for R and Python for silhouette scores? Not in all cases. The Python silhouette scores are 0.365, .339, 0.330, 0.325, 0.301, 0.294, 0.210, 0.210, 0.194,0.173. There are similarities where the best score is .365 in both cases. The R silhouette scores were 0.365 0.339, 0.330, 0.325, 0.301, 0.294, 0.210. Both R and Python silhouette calculations were based on 'Euclidean' distances. Python calculated the silhouette scores for 10 clusters (k=2) while R calculated Silhouette scores for 7 clusters only. The threshold cut-off level for R was 0.21 but for Python it was 0.173.
+
+
+
+- How would you describe U.S. governors' messaging about COVID?
+Most of the U.S. governors' messaging about COVID seems to be centered around the measures that were either taken or those that need to be taken in order to combat the virus. Most of the messages related to COVID contained the words emergency, response, update, health. The final results shows that there are 6 clusters which are between 0.29 and 0.36. For n = 7, the silhouette values drops significantly from 0.29 to 0.21. Hence, we can infer that having 6 clusters is optimum.
+
+Based on the snake plot analysis, we can observe that republican states especially in the mid-west have provided uniform messaging about COVID. However, when all 50 states are considered, based on 25 word-pairs it is difficult to convincingly differentiate between Republican and Democratic governors as many clusters have a mix of R and D states. 
+
+
+- Describe a set of texts and research question that interests you that could be explored using cluster analysis. 
+
+I am currently trying to build a marketing business plan. An important aspect of that analysis is the ability to classsfy customers based on parameters like age, sex, income and location. Cluster analysis will help me to determine which customers are most suited for my business. For example, we can use cluster analysis to classify customers on basis of how much in terms of dollars that they are willing to pay for a given service or product.
+We can then focus our marketing efforts to target only the customers that ready to pay the price point that we are expecting. There are various ways in which we can get the information about customer's inclination to purchase like search history, previous purchase pattens, profession, qualification, median income in the zip code that they live etc. 
+
+

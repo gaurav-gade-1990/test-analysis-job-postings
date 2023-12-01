@@ -1,0 +1,228 @@
+---
+title: "Word2Vec"
+author: "Gaurav Gade"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load the libraries + functions
+
+Load all the libraries or functions that you will use to for the rest of the assignment. It is helpful to define your libraries and functions at the top of a report, so that others can know what they need for the report to compile correctly.
+
+```{r libaries}
+##r chunk
+library(reticulate)
+```
+
+Load the Python libraries or functions that you will use for that section. 
+
+```{python}
+import pandas as pd
+import numpy as np
+from bs4 import BeautifulSoup
+import re
+from nltk.corpus import stopwords
+import nltk
+from sklearn.metrics import classification_report
+from sklearn.metrics import accuracy_score
+
+import nltk
+import gensim
+from nltk.corpus import abc
+
+```
+
+## The Data
+
+The dataset is a set of Youtube comments that have been coded as:
+  - 1: spam youtube messages 
+  - 0: good youtube messages
+  - This data is stored in the `CLASS` column
+
+Import the data using either R or Python. I put a Python chunk here because you will need one to import the data, but if you want to first import into R, that's fine. 
+
+```{r import data}
+SOdata = read.csv("C:/Users/nagar/Documents/ANLY 540 Language Modeling/Project/Job/job_final.csv")
+```
+
+```{python}
+##python chunk
+SOdata = pd.read_csv("C:/Users/nagar/Documents/ANLY 540 Language Modeling/Project/Job/job_final.csv")
+SOdata.head()
+SOdata['JobRequirment']
+```
+
+## Clean up the data
+
+Use one of our clean text functions to clean up the `JobRequirment` column in the dataset. 
+
+```{python}
+
+SOdata = r.SOdata
+list_data = SOdata['JobRequirment'].tolist()
+
+SOdata.head()
+SOdata['JobRequirment']
+ 
+# token_data = []
+# 
+# for sent in list_data:
+#   temp = gensim.utils.simple_preprocess(sent)
+#   token_data.append(temp)
+#   
+# token_data[0:2]
+
+##python chunk
+REPLACE_BY_SPACE_RE = re.compile('[/(){}\[\]\|@,;]') #remove symbols with space
+BAD_SYMBOLS_RE = re.compile('[^0-9a-z #+_]') #take out symbols altogether
+STOPWORDS = set(stopwords.words('english')) #stopwords
+
+def clean_text(text):
+    text = BeautifulSoup(text, "lxml").text # HTML decoding
+    text = text.lower() # lowercase text
+    text = REPLACE_BY_SPACE_RE.sub(' ', text) # replace REPLACE_BY_SPACE_RE symbols by space in text
+    text = BAD_SYMBOLS_RE.sub('', text) # delete symbols which are in BAD_SYMBOLS_RE from text
+    text = ' '.join(word for word in text.split() if word not in STOPWORDS) # delete stopwords from text
+    return text
+
+```
+
+## Split the data
+
+Split the data into testing and training data.
+
+```{python}
+##python chunk
+X = SOdata['JobRequirment']
+y = SOdata['IT']
+
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state = 42)
+
+```
+
+## Process the data
+
+For FastText OR word2vec, create the tokenized vectors of the text.
+
+```{python}
+##python chunk
+
+tokenized_train = [nltk.tokenize.word_tokenize(text)
+                   for text in X_train.to_list()]
+tokenized_test = [nltk.tokenize.word_tokenize(text)
+                   for text in X_test.to_list()]
+```
+
+## Build Model
+
+Build either a word2vec or FastText model.
+
+```{python}
+##python chunk
+# build word2vec model
+w2v_model = gensim.models.Word2Vec(tokenized_train, 
+                                   size=100, window=6,
+                                   min_count=2, iter=5, workers=4)
+                                   
+##python chunk
+from gensim.models.fasttext import FastText
+
+# #build a fast test model
+# ft_model = FastText(tokenized_train, size=100, window=6, 
+#                     min_count=2, iter=5, workers=4)
+
+```
+
+## Convert the model
+
+Convert the model into a set of features to use in our classifier. 
+
+```{python}
+##python chunk
+##python chunk
+def document_vectorizer(corpus, model, num_features):
+    vocabulary = set(model.wv.index2word)
+    
+    def average_word_vectors(words, model, vocabulary, num_features):
+        feature_vector = np.zeros((num_features,), dtype="float64")
+        nwords = 0.
+        
+        for word in words:
+            if word in vocabulary: 
+                nwords = nwords + 1.
+                feature_vector = np.add(feature_vector, model.wv[word])
+        if nwords:
+            feature_vector = np.divide(feature_vector, nwords)
+
+        return feature_vector
+
+    features = [average_word_vectors(tokenized_sentence, model, vocabulary, num_features)
+                    for tokenized_sentence in corpus]
+    return np.array(features)
+    
+##python chunk
+# generate averaged word vector features from word2vec model
+avg_wv_train_features = document_vectorizer(corpus=tokenized_train,
+                                                    model=w2v_model,
+                                                     num_features=100)
+avg_wv_test_features = document_vectorizer(corpus=tokenized_test, 
+                                                    model=w2v_model,
+                                                    num_features=100)
+
+
+# ##python chunk
+# avg_ft_train_features = document_vectorizer(corpus=tokenized_train, model=ft_model,
+#                                                      num_features=100)
+# avg_ft_test_features = document_vectorizer(corpus=tokenized_test, model=ft_model,
+#                                                     num_features=100)          
+```
+
+## Build a classifier model
+
+In class, we used logistic regression to classify the data. You can use any machine learning algorithm you want here, and build a classification model. 
+
+```{python}
+##python chunk
+
+#define your outcomes
+my_tags = ["TRUE","FALSE"]
+
+#build a log model
+from sklearn.linear_model import LogisticRegression
+logreg = LogisticRegression(solver='lbfgs', multi_class='auto', max_iter=10000)
+
+#fit the data to the log model
+logreg = logreg.fit(avg_wv_train_features, y_train)
+
+# ##python chunk
+# logreg = LogisticRegression(solver='lbfgs', multi_class='ovr', max_iter=10000)
+# logreg = logreg.fit(avg_ft_train_features, y_train)
+# y_pred = logreg.predict(avg_ft_test_features)
+# print('accuracy %s' % accuracy_score(y_pred, y_test))
+
+```
+
+## Examine the results
+
+Print out the accuracy, recall, and precision of your model.
+
+```{python}
+##python chunk
+#predict new data
+y_pred = logreg.predict(avg_wv_test_features)
+
+#print out results
+print('accuracy %s' % accuracy_score(y_pred, y_test))
+
+
+print(classification_report(y_test, y_pred,target_names=my_tags))
+
+#print(classification_report(y_test, y_pred,target_names=my_tags))
+```

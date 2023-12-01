@@ -1,0 +1,142 @@
+---
+title: "Network Models"
+author: "Gaurav Gade"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load the libraries + functions
+
+Load all the libraries or functions that you will use to for the rest of the assignment. It is helpful to define your libraries and functions at the top of a report, so that others can know what they need for the report to compile correctly.
+
+```{r libaries}
+##r chunk
+library(gutenbergr)
+library(stringr)
+library(dplyr)
+library(tidyr)
+library(memnet)
+library(jsonlite)
+library(dplyr)
+library(tidytext)
+library(widyr)
+library(ggplot2)
+library(igraph)
+library(ggraph)
+library(tidyr)
+library(memnet)
+
+
+```
+
+## The Data
+
+Choose one of the books below. The code to download and structure the books has been provided for you, so all you would need to do is *change out* the title. 
+
+- Book Titles:
+    - Crime and Punishment
+    - Pride and Prejudice
+    - A Christmas Carol
+    - The Iliad
+    - The Art of War
+    - An Inquiry into the Nature and Causes of the Wealth of Nations
+    - Democracy in America — Volume 1
+    - Dream Psychology: Psychoanalysis for Beginners
+    - Talks To Teachers On Psychology; And To Students On Some Of Life\'s Ideals
+
+```{r project_g}
+##r chunk
+##pick one book from the list above
+
+job = read.csv("C:/Users/nagar/Documents/ANLY 540 Language Modeling/Project/Job/job_final for network.csv")
+
+
+book = job[c(1,4,9)]
+book = na.omit(book)
+
+book = book %>% mutate(JobID = row_number())
+
+book$JobRequirment = array(book$JobRequirment)
+book$Title = array(book$Title)
+book$JobID = array(book$JobID)
+
+book = na.omit(book)
+
+```
+
+## Clean up the data
+
+In this section, you want to create a tibble/dataframe of the individual words from your book (use by_chapter$text). Try using `unnest_tokens` (arguments shoud be word, text) and `anti_join` to create a unigram list of words without stopwords included. 
+
+```{r}
+#Tibble:
+
+book_word <- book %>%
+	unnest_tokens(word, JobRequirment) %>%
+		anti_join(stop_words)
+
+
+```
+
+## Simple statistics
+
+In this section, use the `count` function to determine the most frequent words used in the book that are not stopwords. 
+
+```{r}
+
+book_word %>% 
+  count(word, sort = TRUE)
+
+book %>% count(book$Title, sort = TRUE)
+
+
+
+
+```
+
+## Collocates clean up
+
+Create a tibble/dataframe that includes the collocate pairs in the book you picked using `pairwise_count`. The document column is equivalent to id in the lecture example.
+
+```{r}
+title_word_pairs <- book_word %>% 
+  pairwise_count(word, JobID, sort = TRUE, upper = FALSE)
+head(title_word_pairs)
+
+
+```
+
+## Create a network plot
+
+Create a network plot of the collocates - remember you can change the n > XX to a number that keeps a lot of the data, but filters out a lot of the smaller combinations. Set the n value in the filter function to be equal to or less than the highest n value in the word_pairs table.
+
+```{r}
+set.seed(52550)
+title_word_pairs %>%
+  filter(n >= 15 & n <= 16) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") + #use ?ggraph to see all the options
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "purple") +
+  geom_node_point(size = 1) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.3, "lines")) +
+  theme_void()
+
+```
+
+## Interpretation
+
+What do the simple statistics and network plots tell you about the book you selected? Interpret your output in a few sentences summarizing your visualizations. 
+
+The simple statistics and network plots reveal that the book focuses on the factors that contribute to a nation's economy and wealth. In this case, there appears to be a strong relationship between labor, produce, means, manner, time and frequently. This seems to indicate two things - agricultural output and industrial output. Then there is a relationship between proportion, manner, frequency and time which all relate to production and manufacturing timelines. The speed at which a country can manufacture goods and route them to the market for distribution is a strong indicator of a nation's competitiveness. Then we see a link between price and proportion which indicates the procing strategy and most likely how expensive goods are per unit like (price of oil per gallon or price of steel / kg etc.). The words labor, employed, people are all linked which indicates the power of a nation's service based industry. There is a link between quantity, means, trade
+The most frequent words appearing in the book are  labor, produce, country, time, manner, frequently and employed all of which are important benchmarks for a country's economic output and competitiveness.
+
+
+
+
